@@ -114,9 +114,8 @@ export async function fetchChannelMessages (channel: TextChannel | NewsChannel |
     let messages: MessageData[] = [];
     const messageCount: number = isNaN(options.maxMessagesPerChannel) ? 10 : options.maxMessagesPerChannel;
     const fetchOptions: ChannelLogsQueryOptions = { limit: 100 };
-    let lastMessageId: Snowflake;
-    let fetchComplete: boolean = false;
-    while (!fetchComplete) {
+    let lastMessageId: Snowflake | undefined;
+    while (messages.length < messageCount) {
         if (lastMessageId) {
             fetchOptions.before = lastMessageId;
         }
@@ -125,23 +124,27 @@ export async function fetchChannelMessages (channel: TextChannel | NewsChannel |
             break;
         }
         lastMessageId = fetched.last().id;
-        await Promise.all(fetched.map(async (msg) => {
-            if (!msg.author || messages.length >= messageCount) {
-                fetchComplete = true;
-                return;
-            }
+        for (const msg of fetched.values()) {
+            if (!msg.author) continue;
+            if (messages.length >= messageCount) break;
             const files = await Promise.all(msg.attachments.map(async (a) => {
-                let attach = a.url
-                if (a.url && ['png', 'jpg', 'jpeg', 'jpe', 'jif', 'jfif', 'jfi'].includes(a.url)) {
-                    if (options.saveImages && options.saveImages === 'base64') {
-                        attach = (await (nodeFetch(a.url).then((res) => res.buffer()))).toString('base64')
+                let attachmentRef = a.url;
+                const basePath = a.url.split('?')[0];
+                const ext = basePath.split('.').pop()?.toLowerCase();
+                const isImage = !!ext && ['png','jpg','jpeg','jpe','jif','jfif','jfi','gif','webp'].includes(ext);
+                if (isImage && options.saveImages === 'base64') {
+                    try {
+                        const buf = await nodeFetch(a.url).then((res) => res.buffer());
+                        attachmentRef = buf.toString('base64');
+                    } catch {
+                        // keep URL fallback
                     }
                 }
                 return {
                     name: a.name,
-                    attachment: attach
+                    attachment: attachmentRef
                 };
-            }))
+            }));
             messages.push({
                 username: msg.author.username,
                 avatar: msg.author.displayAvatarURL(),
@@ -150,9 +153,12 @@ export async function fetchChannelMessages (channel: TextChannel | NewsChannel |
                 files,
                 pinned: msg.pinned
             });
-        }));
-        return messages;
+        }
+        if (fetched.size < fetchOptions.limit) {
+            break; // nothing more to fetch
+        }
     }
+    return messages;
 } 
 
 /**
@@ -215,7 +221,7 @@ export async function fetchTextChannelData(channel: TextChannel | NewsChannel, o
             if (configOptions2.Debug) {
                 console.log('[Debug] Fetching channel messages...');
             }
-           
+            channelData.messages = await fetchChannelMessages(channel, options);
             if (configOptions2.Debug) {
                 console.log(`[Debug] Fetched ${channelData.messages.length} messages for channel ${channel.name}`);
             }
