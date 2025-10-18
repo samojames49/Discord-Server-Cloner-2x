@@ -151,8 +151,8 @@ export async function fetchChannelMessages (channel: TextChannel | NewsChannel |
                 pinned: msg.pinned
             });
         }));
-        return messages;
     }
+    return messages;
 } 
 
 /**
@@ -215,7 +215,8 @@ export async function fetchTextChannelData(channel: TextChannel | NewsChannel, o
             if (configOptions2.Debug) {
                 console.log('[Debug] Fetching channel messages...');
             }
-           
+            channelData.messages = await fetchChannelMessages(channel, options);
+            
             if (configOptions2.Debug) {
                 console.log(`[Debug] Fetched ${channelData.messages.length} messages for channel ${channel.name}`);
             }

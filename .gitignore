@@ -1,5 +1,35 @@
-bypass.ts
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables
 .env
-pnpm-lock.yaml
-666.json
-node_modules
+.env.local
+
+# Backups and cloner data
+cloner/
+*.json.backup
+
+# Build files
+dist/
+build/
+*.js.map
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+temp/
+tmp/
+*.tmp
