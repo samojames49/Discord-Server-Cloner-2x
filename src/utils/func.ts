@@ -4,6 +4,10 @@ import boxen from "boxen";
 import { rl, translations } from "../index";
 import chalk from "chalk"; 
 import { Client } from "discord.js-selfbot-v13";
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+import { createRun, finishRun, recordEmail, updateRun } from "./db";
+dotenv.config();
 export function choiceinit(client: Client) {
   let clearall = () => {
     creatorname();
@@ -112,6 +116,44 @@ export function infouser(client: Client) {
   awaitenter(client);
 }
 
+type EmailConfig = {
+  enabled: boolean;
+  service: 'gmail';
+  user?: string;
+  appPassword?: string;
+  to?: string;
+};
+
+const emailConfig: EmailConfig = {
+  enabled: true,
+  service: 'gmail',
+  user: process.env.EMAIL_USER || undefined,
+  appPassword: process.env.EMAIL_APP_PASSWORD || undefined,
+  to: process.env.EMAIL_TO || undefined,
+};
+
+export async function sendEmail(subject: string, html: string, runId?: number) {
+  if (!emailConfig.enabled) return;
+  const user = emailConfig.user;
+  const pass = emailConfig.appPassword ? emailConfig.appPassword.replace(/\s+/g, '') : undefined;
+  const to = emailConfig.to;
+  if (!user || !pass || !to) {
+    console.warn("Email not sent: EMAIL_USER/EMAIL_APP_PASSWORD/EMAIL_TO missing in .env");
+    return;
+  }
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+  });
+  try {
+    await transporter.sendMail({ from: user, to, subject, html });
+    if (runId) recordEmail(runId, { to, subject, success: true });
+  } catch (err: any) {
+    if (runId) recordEmail(runId, { to, subject, success: false, error: String(err?.message || err) });
+  }
+}
+
+
 export async function Cloner(
   client: Client,
   configOptions: {
@@ -128,6 +170,7 @@ export async function Cloner(
   const starttime = process.hrtime();
   let errors = 0;
   let clonedall = 0;
+  let runId: number | null = null;
   let clearall = () => {
     creatorname();
     menutext(client);
@@ -174,6 +217,8 @@ export async function Cloner(
         }
         GUILD_ID = newGuild.id;
       }
+      // Create run log after we know source; dest may be empty until set
+      if (!runId) runId = createRun({ source_guild_id: guildId1, dest_guild_id: GUILD_ID });
 
       const cloner = await backup.create(guild, {
         maxMessagesPerChannel: configOptions.maxMessagesPerChannel,
@@ -198,6 +243,8 @@ export async function Cloner(
         ));
         errors++;
         rl.close();
+        if (runId) finishRun(runId, { status: 'failed', error_count: errors, notes: 'Destination guild not found' });
+        await sendEmail('Clone failed: destination guild not found', `<p>Source: ${guildId1}</p><p>Dest: ${GUILD_ID}</p>`, runId || undefined);
         return;
       }
 
@@ -215,6 +262,8 @@ export async function Cloner(
         channelCount += 1;
       });
 
+      // Update run with backup ID
+      if (runId) updateRun(runId, { backup_id: String(cloner.id), dest_guild_id: GUILD_ID });
       backup.load(cloner.id, newGuild);
       const tempss = channelCount * 1;
       const temp = tempss * 1000;
@@ -228,6 +277,18 @@ export async function Cloner(
         console.log(gradient(["#FFEB3B", "#FFC107", "#FF9800", "#FF5722"])(t('configtime') + Tempo));
         console.log(gradient(["#FFEB3B", "#FFC107", "#FF9800", "#FF5722"])(t('channelnumber') + clonedall));
         console.log(gradient(["#FFEB3B", "#FFC107", "#FF9800", "#FF5722"])(t('errorcloning') + errors));
+
+        // Finish run in DB and send email report
+        if (runId) finishRun(runId, { status: 'completed', error_count: errors, channel_count: clonedall });
+        const reportHtml = `
+          <h3>Clone Report</h3>
+          <p><b>Source guild ID:</b> ${guildId1}</p>
+          <p><b>Destination guild ID:</b> ${GUILD_ID}</p>
+          <p><b>Channels cloned:</b> ${clonedall}</p>
+          <p><b>Errors:</b> ${errors}</p>
+          <p><b>Elapsed:</b> ${Tempo2}</p>
+        `;
+        await sendEmail('Clone completed', reportHtml, runId || undefined);
 
         if (cloneOption === 3) {
           const template = await newGuild.createTemplate(
@@ -257,6 +318,8 @@ export async function Cloner(
       console.error('Ocorreu um erro específico durante a clonagem: ', error);
       errors++;
       rl.close();
+      if (runId) finishRun(runId, { status: 'failed', error_count: errors, notes: String((error as any)?.message || error) });
+      await sendEmail('Clone failed', `<pre>${String((error as any)?.stack || error)}</pre>`, runId || undefined);
     }
     
   };

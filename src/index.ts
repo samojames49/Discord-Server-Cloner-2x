@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import gradient from "gradient-string";
 import { choiceinit, menutext, creatorname, setlang, t } from "./utils/func";
 import transjson from './utils/translations.json';
+import { initDb } from './utils/db';
 dotenv.config();
 
 export const client = new Discord.Client({
@@ -14,6 +15,12 @@ export const client = new Discord.Client({
 export const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
 const token = process.env.TOKEN;
+// Validate critical env when starting
+const missingEnv: string[] = [];
+['EMAIL_USER','EMAIL_APP_PASSWORD','EMAIL_TO'].forEach((k) => { if (!process.env[k]) missingEnv.push(k); });
+if (missingEnv.length > 0) {
+  console.warn('Missing optional email env vars:', missingEnv.join(', '));
+}
 function loading2() {
   let ponto = 0;
   return setInterval(() => {
@@ -22,6 +29,8 @@ function loading2() {
   }, 500);
 }
 const loading = loading2();
+// Initialize local database for logs
+try { initDb(); } catch (e) { console.error('Failed to init DB:', e); }
 client.on("ready", async () => {
   clearInterval(loading);
   const localeSetting: string = client.settings.locale;
