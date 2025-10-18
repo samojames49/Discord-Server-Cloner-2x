@@ -1,0 +1,26 @@
+# Configuration files with sensitive data
+config.php
+
+# Log files
+*.log
+error.log
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
