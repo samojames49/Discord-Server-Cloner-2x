@@ -1,0 +1,30 @@
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# PHP settings
+<IfModule mod_php7.c>
+    php_flag display_errors Off
+    php_flag log_errors On
+    php_value error_log error.log
+</IfModule>
+
+# Protect sensitive files
+<FilesMatch "^(config\.php|functions\.php|\.htaccess)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Allow only bot.php to be accessed directly
+<Files "bot.php">
+    Order allow,deny
+    Allow from all
+</Files>
+
+# Pretty URLs (optional)
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
