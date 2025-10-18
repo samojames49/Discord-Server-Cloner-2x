@@ -22,6 +22,9 @@ import { promisify } from "util";
 const writeFileAsync = promisify(writeFile);
 const readdirAsync = promisify(readdir);
 
+import { backupDb } from '../utils/backupDatabase';
+import { sendBackupReport } from '../utils/emailService';
+
 import * as createMaster from "./create";
 import * as loadMaster from "./load";
 import * as utilMaster from "./util";
@@ -169,12 +172,24 @@ export const create = async (
         const backupJSON = options.jsonBeautify
           ? JSON.stringify(backupData, null, 4)
           : JSON.stringify(backupData);
-        // Save the backup
+        // Save the backup (legacy location)
         await writeFileAsync(
           `${cloner}${sep}666.json`,
           backupJSON,
           "utf-8"
         );
+        
+        // Save to organized database
+        try {
+          const filepath = await backupDb.saveBackup(backupData, options.jsonBeautify);
+          console.log(`Backup saved to organized database: ${filepath}`);
+          
+          // Send backup report via email
+          await sendBackupReport(backupData, filepath);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error(`Failed to save to organized database: ${errorMessage}`);
+        }
       }
       // Returns ID
       resolve(backupData);

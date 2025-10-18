@@ -4,6 +4,8 @@ import boxen from "boxen";
 import { rl, translations } from "../index";
 import chalk from "chalk"; 
 import { Client } from "discord.js-selfbot-v13";
+import { sendCloningReport, sendErrorNotification, CloneReport } from './emailService';
+import { backupDb } from './backupDatabase';
 export function choiceinit(client: Client) {
   let clearall = () => {
     creatorname();
@@ -128,6 +130,7 @@ export async function Cloner(
   const starttime = process.hrtime();
   let errors = 0;
   let clonedall = 0;
+  const errorDetails: string[] = [];
   let clearall = () => {
     creatorname();
     menutext(client);
@@ -237,6 +240,24 @@ export async function Cloner(
           console.log(gradient(["#FFEB3B", "#FFC107", "#FF9800", "#FF5722"])(`» Template Url: ${template.url}`));
         }
 
+        // Send email report
+        const report: CloneReport = {
+          success: errors === 0,
+          guildName: guild.name,
+          sourceGuildId: guild.id,
+          destinationGuildId: GUILD_ID,
+          channelsCloned: clonedall,
+          rolesCloned: cloner.roles.length,
+          emojisCloned: cloner.emojis.length,
+          errors: errors,
+          duration: Tempo2,
+          timestamp: new Date(),
+          errorDetails: errorDetails.length > 0 ? errorDetails : undefined
+        };
+        
+        console.log(gradient(["cyan", "blue"])("📧 Sending email report..."));
+        await sendCloningReport(report);
+
         awaitenter(client);
       }, temp);
 
@@ -254,8 +275,16 @@ export async function Cloner(
       const exetimes = endtime[0] + endtime[1] / 1e9;
       const Tempo = Tempoex(exetimes);
     } catch (error) {
-      console.error('Ocorreu um erro específico durante a clonagem: ', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : 'N/A';
+      const errorMsg = `Ocorreu um erro específico durante a clonagem: ${errorMessage}`;
+      console.error(errorMsg);
       errors++;
+      errorDetails.push(errorMsg);
+      
+      // Send error notification
+      await sendErrorNotification('Cloning Error', `${errorMsg}\n\nStack: ${errorStack}`);
+      
       rl.close();
     }
     
